@@ -37,7 +37,7 @@
 
 <img src="https://capsule-render.vercel.app/api?type=waving&color=0:7c3aed,100:00d4ff&height=120&section=header&text=NiusRobotLab&fontSize=42&fontColor=fff&animation=twinkling&fontAlignY=35" alt="NiusRobotLab banner" width="100%"/>
 
-### Crafted by [**NiusRobotLab**](https://github.com/NiusRobotLab) — robotics-grade tooling for makers & engineers
+### Crafted by [**NiusRobotLab**](https://www.youtube.com/@NiusRobotLab) — robotics-grade tooling for makers & engineers
 
 <br/>
 
@@ -85,7 +85,7 @@ flowchart LR
 ## Quick start
 
 ```bash
-git clone https://github.com/NiusRobotLab/NiusRobotLab_INA_monitor.git
+git clone https://github.com/dunknowcoding/NiusRobotLab_INA_monitor.git
 cd NiusRobotLab_INA_monitor
 npm install
 npm run dev
@@ -223,7 +223,7 @@ This project is released under the [**MIT License**](LICENSE).
 
 *Open hardware. Open software. Measure everything that matters.*
 
-[![GitHub Org](https://img.shields.io/badge/GitHub-NiusRobotLab-181717?style=for-the-badge&logo=github)](https://github.com/NiusRobotLab)
+[![GitHub Org](https://img.shields.io/badge/GitHub-NiusRobotLab-181717?style=for-the-badge&logo=github)](https://www.youtube.com/@NiusRobotLab)
 
 <br/>
 
