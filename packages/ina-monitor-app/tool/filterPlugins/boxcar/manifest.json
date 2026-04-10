@@ -1,0 +1,7 @@
+{
+  "id": "boxcar",
+  "name": "Boxcar MA",
+  "description": "O(n) symmetric moving average via prefix sums; attenuates broadband noise on DC rails.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

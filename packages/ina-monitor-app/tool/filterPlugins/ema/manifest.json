@@ -1,0 +1,7 @@
+{
+  "id": "ema",
+  "name": "EMA",
+  "description": "First-order exponential low-pass O(n); optional direct α or span-derived α for DC tracking.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

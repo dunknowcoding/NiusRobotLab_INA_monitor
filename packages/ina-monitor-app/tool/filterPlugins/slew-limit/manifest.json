@@ -1,0 +1,7 @@
+{
+  "id": "slew-limit",
+  "name": "Slew limit",
+  "description": "Hard limit on |Δy| per sample O(n); clips single-sample spikes while preserving slow trends.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "outlier-iqr",
+  "name": "Tukey IQR",
+  "description": "Quartile-based fences (1.5×IQR); counts outliers for slowly varying DC with occasional spikes.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "median-mad",
+  "name": "Median & MAD",
+  "description": "Robust location (median) and scale (MAD); resistant to heavy-tailed DC noise.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

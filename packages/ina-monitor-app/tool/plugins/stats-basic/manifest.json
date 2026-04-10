@@ -1,0 +1,7 @@
+{
+  "id": "stats-basic",
+  "name": "Basic stats",
+  "description": "Mean, min, max, sample standard deviation on finite samples in the analysis window.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

@@ -1,0 +1,7 @@
+{
+  "id": "median",
+  "name": "Median",
+  "description": "Odd-length sliding median O(n·w·log w); suppresses impulse glitches on slow DC signals.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

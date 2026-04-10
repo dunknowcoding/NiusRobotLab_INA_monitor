@@ -1,0 +1,22 @@
+{
+  "name": "niusrobotlab-ina-monitor",
+  "private": true,
+  "version": "0.1.5",
+  "description": "INA Monitor open-source workspace: debuggable UI and firmware bridge examples (Linux, macOS, Windows).",
+  "license": "MIT",
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @niusrobotlab/ina-monitor-app",
+    "build": "npm run build -w @niusrobotlab/ina-monitor-core && npm run build -w @niusrobotlab/ina-monitor-app",
+    "start:app": "npm run start:prod -w @niusrobotlab/ina-monitor-app",
+    "test": "npm run test -w @niusrobotlab/ina-monitor-core",
+    "lint": "eslint .",
+    "lint:ws": "npm run lint -ws --if-present",
+    "format": "npm run format -ws"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0",
+    "typescript-eslint": "^8.18.0"
+  }
+}

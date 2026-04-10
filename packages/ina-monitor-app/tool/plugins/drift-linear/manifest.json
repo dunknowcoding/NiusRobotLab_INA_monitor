@@ -1,0 +1,7 @@
+{
+  "id": "drift-linear",
+  "name": "Linear drift",
+  "description": "Ordinary least-squares line vs. session-relative time; slope in units per second.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

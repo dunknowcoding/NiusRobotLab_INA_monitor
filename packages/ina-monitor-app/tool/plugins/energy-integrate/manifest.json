@@ -1,0 +1,7 @@
+{
+  "id": "energy-integrate",
+  "name": "Trapezoid ∫",
+  "description": "Trapezoidal integration vs. time: ∫P→J/Wh, ∫I→As/Ah, ∫V→V·s (meanings depend on channel).",
+  "version": "1.0.0",
+  "domain": "dc"
+}

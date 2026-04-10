@@ -1,0 +1,7 @@
+{
+  "id": "moving-average",
+  "name": "MA residual",
+  "description": "Applies an internal boxcar of configurable length; reports last smoothed value and residual RMS.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

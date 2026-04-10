@@ -1,0 +1,7 @@
+{
+  "id": "derivative-rate",
+  "name": "Finite-difference rate",
+  "description": "Backward differences on consecutive samples; mean and peak |dy/dt| using Δt from timestamps.",
+  "version": "1.0.0",
+  "domain": "dc"
+}

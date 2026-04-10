@@ -1,0 +1,7 @@
+{
+  "id": "threshold-events",
+  "name": "Threshold counts",
+  "description": "Count samples above an upper and/or below a lower DC threshold (comparator-style metrics).",
+  "version": "1.0.0",
+  "domain": "dc"
+}
