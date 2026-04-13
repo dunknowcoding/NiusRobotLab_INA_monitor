@@ -1,6 +1,6 @@
 {
   "name": "@niusrobotlab/ina-monitor-core",
-  "version": "0.1.5",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",

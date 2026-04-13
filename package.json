@@ -1,7 +1,7 @@
 {
   "name": "niusrobotlab-ina-monitor",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.2.5",
   "description": "INA Monitor open-source workspace: debuggable UI and firmware bridge examples (Linux, macOS, Windows).",
   "license": "MIT",
   "workspaces": ["packages/*"],

@@ -21,7 +21,7 @@
 ### Precision power analytics for INA-series shunt monitors
 
 [![License](https://img.shields.io/badge/license-MIT-00d4ff?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.5-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](package.json)
+[![Version](https://img.shields.io/badge/version-0.2.5-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](package.json)
 [![Electron](https://img.shields.io/badge/Electron-32.x-47848f?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![React](https://img.shields.io/badge/React-18-61dafb?style=for-the-badge&logo=react&logoColor=0d1117)](https://react.dev/)
 

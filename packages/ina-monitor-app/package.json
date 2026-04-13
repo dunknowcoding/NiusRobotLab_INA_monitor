@@ -1,6 +1,6 @@
 {
   "name": "@niusrobotlab/ina-monitor-app",
-  "version": "0.1.5",
+  "version": "0.2.5",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
@@ -15,7 +15,7 @@
     "format": "prettier -w ."
   },
   "dependencies": {
-    "@niusrobotlab/ina-monitor-core": "0.1.5",
+    "@niusrobotlab/ina-monitor-core": "0.2.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "serialport": "^13.0.0"
