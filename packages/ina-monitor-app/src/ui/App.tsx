@@ -2463,19 +2463,18 @@ function quantizedSeriesYBounds(arr: number[]): { lo: number; hi: number } {
 }
 
 /**
- * Stabilize autoscale on one axis (Y traces or relative time window): expand immediately; contract slowly.
- * Invariant: lo <= raw.lo, hi >= raw.hi (data stays inside range).
+ * Stabilize Y autoscale: expand immediately when data needs room; contract slowly to reduce vertical jitter.
+ * Invariant: lo <= raw.lo, hi >= raw.hi (curve stays inside axis).
  */
 function smoothYAxisBounds(
   prev: { lo: number; hi: number } | null,
-  raw: { lo: number; hi: number },
-  relaxFrac = 0.035
+  raw: { lo: number; hi: number }
 ): { lo: number; hi: number } {
   if (!prev) return raw;
   let lo = Math.min(prev.lo, raw.lo);
   let hi = Math.max(prev.hi, raw.hi);
   const span = Math.max(hi - lo, 1e-12);
-  const relax = span * relaxFrac;
+  const relax = span * 0.035;
   lo = Math.min(raw.lo, lo + relax);
   hi = Math.max(raw.hi, hi - relax);
   return { lo, hi };
@@ -2503,12 +2502,10 @@ function MiniPlot({
     i: null,
     p: null
   });
-  const xTimeStableRef = useRef<{ lo: number; hi: number } | null>(null);
   const yAxisSessionKeyRef = useRef(sessionOriginMs);
   if (sessionOriginMs !== yAxisSessionKeyRef.current) {
     yAxisSessionKeyRef.current = sessionOriginMs;
     yAxisStableRef.current = { v: null, i: null, p: null };
-    xTimeStableRef.current = null;
   }
   const throttleMs = useMemo(() => chartUiThrottleMs(sampleRateHz), [sampleRateHz]);
   const plotSeries = useThrottledPlotSeries(series as SeriesBundle, throttleMs);
@@ -2583,27 +2580,8 @@ function MiniPlot({
   function relMs(tAbs: number) {
     return tAbs - origin;
   }
-  /** Relative time window (ms): quantized + smoothed so xspan does not jitter frame-to-frame. */
-  const xWindowStable = useMemo(() => {
-    const t = plotSeries.t;
-    if (t.length === 0) return { lo: 0, hi: 1 };
-    const org = sessionOriginMs ?? t[0]!;
-    const rel = (abs: number) => abs - org;
-    let rawMin = rel(t[0]!);
-    let rawMax = rel(t[t.length - 1]!);
-    const minSpan = Math.max(15, 800 / Math.max(1, sampleRateHz));
-    if (rawMax - rawMin < minSpan) {
-      const mid = (rawMin + rawMax) / 2;
-      rawMin = mid - minSpan / 2;
-      rawMax = mid + minSpan / 2;
-    }
-    const rawQ = quantizeAxisBounds(rawMin, rawMax);
-    const s = smoothYAxisBounds(xTimeStableRef.current, rawQ, 0.028);
-    xTimeStableRef.current = s;
-    return s;
-  }, [plotSeries, sessionOriginMs, sampleRateHz]);
-  const xmin = xWindowStable.lo;
-  const xmax = xWindowStable.hi;
+  const xmin = xs.length ? relMs(xs[0]!) : 0;
+  const xmax = xs.length ? relMs(xs[xs.length - 1]!) : 0;
   const xspan = Math.max(1e-6, xmax - xmin);
 
   const dmax = plotDownsampleMax ?? 1600;
