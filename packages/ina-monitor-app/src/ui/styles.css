@@ -1197,10 +1197,47 @@ button:disabled {
   font-size: var(--fs-small);
   color: var(--muted);
 }
+/** Manual/Auto schedule: Trigger + (Period + checkbox) aligned on one row with clear separation */
+.dcToolsScheduleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px 20px;
+  width: 100%;
+  grid-column: 1 / -1;
+}
+.dcToolsFieldTrigger {
+  flex: 0 0 auto;
+  min-width: 108px;
+}
+.dcToolsAutoScheduleGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px 22px;
+  padding: 4px 0 2px 18px;
+  margin-left: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
 .dcToolsFieldCheck {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.dcToolsFieldCheck input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent, #5aa7ff);
+}
+.dcToolsFieldCheck > span {
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--muted);
 }
 .dcToolsReadonly {
   display: flex;

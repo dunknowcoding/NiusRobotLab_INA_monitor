@@ -117,7 +117,8 @@ app.whenReady().then(() => {
         if (!line) continue;
         try {
           const obj = JSON.parse(line) as Record<string, unknown>;
-          if (obj.v === 1 && typeof obj.chip === "string") {
+          // Forward all protocol lines (v===1). Renderer filters INFO / measurements / ERR; ACK/PONG are ignored there.
+          if (obj.v === 1) {
             broadcastSerialSample(portPath, obj);
           }
         } catch {
@@ -145,6 +146,9 @@ app.whenReady().then(() => {
     if (!port) throw new Error(`Port not open: ${opts.path}`);
     await new Promise<void>((resolve, reject) => {
       port.write(opts.data, (err) => (err ? reject(err) : resolve()));
+    });
+    await new Promise<void>((resolve, reject) => {
+      port.drain((err) => (err ? reject(err) : resolve()));
     });
     return { ok: true as const };
   });

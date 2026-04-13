@@ -23,6 +23,7 @@ import {
   ina3221ChannelStopCommand,
   ina3221StartCommand,
   ina3221StopCommandForSwitch,
+  seriesBufferCapacityHz,
   type Ina3221UiMode,
   type SeriesBundle
 } from "./ina3221Helpers";
@@ -36,7 +37,79 @@ import { IconConnect, IconDisconnect, IconStart, IconStop } from "./SourceContro
 
 type Mode = "basic" | "advanced";
 
-type SampleRatePreset = 1 | 2 | 5 | 10 | 20 | 50 | 100;
+/** Inferred from device JSON `addr` (0x.. = I²C, SPI = SPI-only bridge). */
+type SerialLinkBus = "unknown" | "i2c" | "spi";
+
+function inferSerialLinkBus(addr: unknown): SerialLinkBus {
+  if (typeof addr !== "string") return "unknown";
+  const a = addr.trim();
+  if (/^spi$/i.test(a)) return "spi";
+  if (/^0x[0-9a-fA-F]{1,2}$/.test(a)) return "i2c";
+  return "unknown";
+}
+
+function maxSampleRateForBus(bus: SerialLinkBus): number {
+  return bus === "spi" ? 2000 : 400;
+}
+
+const SAMPLE_RATES_I2C = [1, 2, 5, 10, 20, 50, 100, 200, 400] as const;
+const SAMPLE_RATES_SPI_EXTRA = [500, 800, 1000, 1500, 2000] as const;
+
+function sampleRateMenuValues(bus: SerialLinkBus): number[] {
+  return bus === "spi" ? [...SAMPLE_RATES_I2C, ...SAMPLE_RATES_SPI_EXTRA] : [...SAMPLE_RATES_I2C];
+}
+
+function clampSampleRateForBus(hz: number, bus: SerialLinkBus): number {
+  const cap = maxSampleRateForBus(bus);
+  return Math.min(Math.max(1, Math.round(hz)), cap);
+}
+
+/** Serial: chip from device JSON only. Mock: user-selected simulated part. */
+function effectiveChip(s: Source): ChipId {
+  if (s.transport === "Serial") {
+    return s.detected?.detectedChip ?? "UNKNOWN";
+  }
+  return s.selectedChip;
+}
+
+/**
+ * Max points drawn per trace (evenly subsampled). Capped lower at high Hz so polylines are readable
+ * and SVG updates are less smeared than ~2.4*Hz with a 2400 ceiling.
+ */
+function plotDecimationMax(sampleHz: number): number {
+  const hz = Math.max(1, sampleHz);
+  const raw = Math.round(160 + hz * 0.42);
+  return Math.min(480, Math.max(200, raw));
+}
+
+/** V/I/P cards: 5 Hz — readable at high stream rates. */
+const METRIC_DISPLAY_INTERVAL_MS = 200;
+
+/**
+ * Chart redraw cadence: at ≥20 Hz sampling, cap to ~20 Hz motion (50 ms); slower sampling follows the sample period.
+ */
+function chartUiThrottleMs(sampleHz: number): number {
+  const hz = Math.max(1, sampleHz);
+  return Math.max(50, 1000 / hz);
+}
+
+function snapshotSeriesBundle(s: SeriesBundle): SeriesBundle {
+  return { t: s.t.slice(), v: s.v.slice(), i: s.i.slice(), p: s.p.slice() };
+}
+
+function useThrottledPlotSeries(series: SeriesBundle, intervalMs: number): SeriesBundle {
+  const latestRef = useRef(series);
+  latestRef.current = series;
+  const [display, setDisplay] = useState(() => snapshotSeriesBundle(series));
+  useEffect(() => {
+    setDisplay(snapshotSeriesBundle(latestRef.current));
+    const id = window.setInterval(() => {
+      setDisplay(snapshotSeriesBundle(latestRef.current));
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return display;
+}
 
 /** Browser tab has no preload — serial bridge unavailable */
 const MSG_NO_ELECTRON =
@@ -136,7 +209,9 @@ type Source = {
   serialPath?: string;
   selectedChip: ChipId;
   detected?: ChipDetectionResult;
-  sampleRate: SampleRatePreset;
+  /** Set from JSON `addr` once INFO/sample lines arrive (Serial only). */
+  serialLinkBus?: SerialLinkBus;
+  sampleRate: number;
   connected: boolean;
   monitoring: boolean;
   Imax: number;
@@ -177,13 +252,13 @@ function clearIna3221RuntimeBuffers(chip: ChipId): Partial<Source> {
 /** Same V/I/P pick as plot/cards */
 function pickSignalsForSource(s: Source): { busVoltage_V?: number; current_A?: number; power_W?: number } {
   if (!s.lastFrame) return {};
-  if (isMultiChannelChipId(s.selectedChip) && (s.ina3221UiMode ?? "single") === "all" && "channels" in s.lastFrame) {
+  if (isMultiChannelChipId(effectiveChip(s)) && (s.ina3221UiMode ?? "single") === "all" && "channels" in s.lastFrame) {
     if (typeof s.displayChannel === "number") {
       return pickSignalsIna3221Channel(s.lastFrame, s.displayChannel);
     }
     return framePickSingle(s.lastFrame);
   }
-  if (isMultiChannelChipId(s.selectedChip) && (s.ina3221UiMode ?? "single") === "single") {
+  if (isMultiChannelChipId(effectiveChip(s)) && (s.ina3221UiMode ?? "single") === "single") {
     const ch = (s.ina3221SingleChannel ??
       (typeof s.displayChannel === "number" ? s.displayChannel : 0)) as 0 | 1 | 2;
     return framePickForDisplay(s.lastFrame, ch);
@@ -203,6 +278,14 @@ function pickSignalsIna3221Channel(
     current_A: c.current_A,
     power_W: c.power_W
   };
+}
+
+/** Source list chip column: serial shows JSON-reported model only; mock shows selected sim chip */
+function sourceListChipDisplay(s: Source): string {
+  if (s.transport === "Serial") {
+    return s.detected?.detectedChip ?? "—";
+  }
+  return s.selectedChip;
 }
 
 function formatHardwareSourceTitle(s: Source): string {
@@ -227,7 +310,7 @@ function compactSourceTag(s: Source): string {
 
 /** INA3221 routing suffix only (avoids repeating chip name from compactSourceTag) */
 function ina3221RouteSuffix(s: Source): string {
-  if (!isMultiChannelChipId(s.selectedChip)) return "";
+  if (!isMultiChannelChipId(effectiveChip(s))) return "";
   if ((s.ina3221UiMode ?? "single") === "all") {
     if (typeof s.displayChannel === "number") return ` ·M${s.displayChannel + 1}`;
     return " ·MΣ";
@@ -252,7 +335,8 @@ function makeSerialSources(): Source[] {
       hardwareSlot: slot,
       transport: "Serial",
       serialPath: `COM${slot}`,
-      selectedChip: "INA219",
+      selectedChip: "UNKNOWN",
+      serialLinkBus: "unknown",
       sampleRate: 10,
       connected: false,
       monitoring: false,
@@ -267,20 +351,39 @@ function makeSerialSources(): Source[] {
   return list;
 }
 
-function LiveMetricTriple(p: { busVoltage_V?: number; current_A?: number; power_W?: number; className?: string }) {
+function LiveMetricTriple(p: {
+  busVoltage_V?: number;
+  current_A?: number;
+  power_W?: number;
+  className?: string;
+}) {
+  const latestRef = useRef(p);
+  latestRef.current = p;
+  const [disp, setDisp] = useState({
+    busVoltage_V: p.busVoltage_V,
+    current_A: p.current_A,
+    power_W: p.power_W
+  });
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const c = latestRef.current;
+      setDisp({ busVoltage_V: c.busVoltage_V, current_A: c.current_A, power_W: c.power_W });
+    }, METRIC_DISPLAY_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, []);
   return (
     <div className={`cards cardsCompact${p.className ? ` ${p.className}` : ""}`}>
       <div className="card">
         <div className="cardTitle">Vbus</div>
-        <div className="cardValue">{fmt(p.busVoltage_V, "V", 3)}</div>
+        <div className="cardValue">{fmt(disp.busVoltage_V, "V", 3)}</div>
       </div>
       <div className="card">
         <div className="cardTitle">I</div>
-        <div className="cardValue">{fmt(p.current_A, "A", 3)}</div>
+        <div className="cardValue">{fmt(disp.current_A, "A", 3)}</div>
       </div>
       <div className="card">
         <div className="cardTitle">P</div>
-        <div className="cardValue">{fmt(p.power_W, "W", 3)}</div>
+        <div className="cardValue">{fmt(disp.power_W, "W", 3)}</div>
       </div>
     </div>
   );
@@ -299,7 +402,7 @@ type MonitoringStripItem = {
 function expandMonitoringChartStrips(sources: Source[]): MonitoringStripItem[] {
   const out: MonitoringStripItem[] = [];
   for (const s of sources) {
-    if (isMultiChannelChipId(s.selectedChip) && (s.ina3221UiMode ?? "single") === "all") {
+    if (isMultiChannelChipId(effectiveChip(s)) && (s.ina3221UiMode ?? "single") === "all") {
       const byCh = s.ina3221SeriesByCh ?? emptyIna3221SeriesByCh();
       const origins = s.chartSessionOriginMsByCh ?? [null, null, null];
       const dc = s.displayChannel;
@@ -350,7 +453,7 @@ function buildProtectionConfig(source: Source): ProtectionConfig {
     sampleRate_Hz: source.sampleRate,
     I_max_expected_A: source.Imax,
     V_nominal_V: source.Vnom,
-    chip: source.selectedChip
+    chip: effectiveChip(source)
   });
   return { ...base, ...source.protectionOverrides };
 }
@@ -494,7 +597,7 @@ export function App() {
     .join("|");
 
   function serialStartLine(s: Source): string {
-    if (!isMultiChannelChipId(s.selectedChip)) return "START\n";
+    if (!isMultiChannelChipId(effectiveChip(s))) return "START\n";
     const mode = s.ina3221UiMode ?? "single";
     const ch = (s.ina3221SingleChannel ??
       (typeof s.displayChannel === "number" ? s.displayChannel : 0)) as 0 | 1 | 2;
@@ -566,7 +669,7 @@ export function App() {
           const eng = engineFor(s);
           eng.enqueueControl({ kind: "CONNECT" });
           eng.stepUntilIdle(1000);
-          updateSource(s.sourceId, { connected: true, faultText: null });
+          updateSource(s.sourceId, { connected: true, faultText: null, detected: undefined, serialLinkBus: "unknown" });
         } catch (e) {
           updateSource(s.sourceId, { faultText: `Open serial failed: ${String(e)}` });
         }
@@ -584,9 +687,10 @@ export function App() {
     updateSource(s.sourceId, {
       monitoring: false,
       chartSessionOriginMs: null,
-      ...clearIna3221RuntimeBuffers(s.selectedChip),
+      ...clearIna3221RuntimeBuffers(effectiveChip(s)),
       series: emptySeries(),
-      lastFrame: null
+      lastFrame: null,
+      ...(s.transport === "Serial" ? { detected: undefined, serialLinkBus: "unknown" as SerialLinkBus } : {})
     });
     const abort = streamAbortRef.current[s.sourceId];
     if (abort) abort.stop = true;
@@ -602,7 +706,7 @@ export function App() {
         const eng = engineFor(s);
         eng.enqueueControl({ kind: "DISCONNECT" });
         eng.stepUntilIdle(1000);
-        updateSource(s.sourceId, { connected: false });
+        updateSource(s.sourceId, { connected: false, serialLinkBus: "unknown" });
       })();
       return;
     }
@@ -616,11 +720,11 @@ export function App() {
     if (!s.connected || s.monitoring) return;
     if (s.transport === "Serial") {
       const path = s.serialPath || s.sourceId;
-      const ina = isMultiChannelChipId(s.selectedChip);
+      const ina = isMultiChannelChipId(effectiveChip(s));
       const mode = s.ina3221UiMode ?? "single";
       const ch = (s.ina3221SingleChannel ??
         (typeof s.displayChannel === "number" ? s.displayChannel : 0)) as 0 | 1 | 2;
-      updateSource(s.sourceId, {
+      const startPatch: Partial<Source> = {
         faultText: null,
         monitoring: true,
         chartSessionOriginMs: null,
@@ -635,37 +739,45 @@ export function App() {
           : ina && mode === "single"
             ? { displayChannel: ch, ina3221SingleChannel: ch }
             : {})
-      });
+      };
+      const sStreaming: Source = { ...s, ...startPatch };
+      updateSource(s.sourceId, startPatch);
+      const eng = engineFor(sStreaming);
+      eng.enqueueControl({ kind: "START" });
+      eng.stepUntilIdle(1000);
       void (async () => {
         try {
           const api = getInaApi();
           if (!api?.serialWrite) {
+            eng.enqueueControl({ kind: "STOP" });
+            eng.stepUntilIdle(1000);
             updateSource(s.sourceId, { faultText: serialBridgeUnavailableMessage(), monitoring: false });
             return;
           }
           const line = serialStartLine({
-            ...s,
-            monitoring: true,
+            ...sStreaming,
             ina3221UiMode: mode,
             ...(ina && mode === "single" ? { ina3221SingleChannel: ch, displayChannel: ch } : {}),
             ...(ina && mode === "all"
               ? { ina3221UiMode: "all" as const, ina3221ChannelRun: [true, true, true] as [boolean, boolean, boolean] }
               : {})
           });
+          const bus = sStreaming.serialLinkBus ?? "unknown";
+          const effHz = clampSampleRateForBus(sStreaming.sampleRate, bus);
+          await api.serialWrite({ path, data: `SR ${effHz}\n` });
           await api.serialWrite({ path, data: line });
           const sid = s.sourceId;
           const sNow = sourcesRef.current.find((x) => x.sourceId === sid);
           if (!sNow?.monitoring || !sNow.connected || sNow.transport !== "Serial") return;
-          const eng = engineFor(sNow);
-          eng.enqueueControl({ kind: "START" });
-          eng.stepUntilIdle(1000);
         } catch (e) {
+          eng.enqueueControl({ kind: "STOP" });
+          eng.stepUntilIdle(1000);
           updateSource(s.sourceId, { faultText: `START failed: ${String(e)}`, monitoring: false });
         }
       })();
       return;
     }
-    const inaSm = isMultiChannelChipId(s.selectedChip);
+    const inaSm = isMultiChannelChipId(effectiveChip(s));
     const modeSm = s.ina3221UiMode ?? "single";
     const chSm = (s.ina3221SingleChannel ??
       (typeof s.displayChannel === "number" ? s.displayChannel : 0)) as 0 | 1 | 2;
@@ -694,7 +806,7 @@ export function App() {
     updateSource(s.sourceId, {
       monitoring: false,
       chartSessionOriginMs: null,
-      ...clearIna3221RuntimeBuffers(s.selectedChip),
+      ...clearIna3221RuntimeBuffers(effectiveChip(s)),
       series: emptySeries(),
       lastFrame: null
     });
@@ -728,7 +840,7 @@ export function App() {
   };
 
   const handleIna3221SingleChannelSwitch = (nextCh: 0 | 1 | 2) => {
-    if (!isMultiChannelChipId(active.selectedChip)) return;
+    if (!isMultiChannelChipId(effectiveChip(active))) return;
     const path = active.serialPath || active.sourceId;
     const prevCh = (active.ina3221SingleChannel ??
       (typeof active.displayChannel === "number" ? active.displayChannel : 0)) as 0 | 1 | 2;
@@ -756,7 +868,7 @@ export function App() {
   };
 
   const handleIna3221UiModeChange = (mode: Ina3221UiMode) => {
-    if (!isMultiChannelChipId(active.selectedChip)) return;
+    if (!isMultiChannelChipId(effectiveChip(active))) return;
     if ((active.ina3221UiMode ?? "single") === mode) return;
     const path = active.serialPath || active.sourceId;
     const ch = (active.ina3221SingleChannel ?? 0) as 0 | 1 | 2;
@@ -791,7 +903,7 @@ export function App() {
   };
 
   const startIna3221ChannelOne = (ch: 0 | 1 | 2) => {
-    if (!isMultiChannelChipId(active.selectedChip) || (active.ina3221UiMode ?? "single") !== "all") return;
+    if (!isMultiChannelChipId(effectiveChip(active)) || (active.ina3221UiMode ?? "single") !== "all") return;
     const path = active.serialPath || active.sourceId;
     const cr = active.ina3221ChannelRun ?? [false, false, false];
     const next = [cr[0], cr[1], cr[2]] as [boolean, boolean, boolean];
@@ -802,7 +914,7 @@ export function App() {
   };
 
   const stopIna3221ChannelOne = (ch: 0 | 1 | 2) => {
-    if (!isMultiChannelChipId(active.selectedChip) || (active.ina3221UiMode ?? "single") !== "all") return;
+    if (!isMultiChannelChipId(effectiveChip(active)) || (active.ina3221UiMode ?? "single") !== "all") return;
     const path = active.serialPath || active.sourceId;
     const cr = active.ina3221ChannelRun ?? [false, false, false];
     const next = [cr[0], cr[1], cr[2]] as [boolean, boolean, boolean];
@@ -821,6 +933,7 @@ export function App() {
       path: string;
       type?: string;
       chip?: string;
+      addr?: string;
       v?: number;
       seq?: number;
       t_ms?: number;
@@ -829,14 +942,50 @@ export function App() {
       power_W?: number;
       channels?: { bus_V?: number; current_A?: number; power_W?: number }[];
     }) => {
-      if (payload.type === "INFO") return;
+      if (payload.type === "INFO") {
+        const path = payload.path;
+        const bus = inferSerialLinkBus(payload.addr);
+        const chipStr = typeof payload.chip === "string" ? (payload.chip as ChipId) : undefined;
+        if (bus === "unknown" && !chipStr) return;
+        setSources((prev) =>
+          prev.map((src) => {
+            if (src.transport !== "Serial") return src;
+            const sp = src.serialPath || src.sourceId;
+            if (!serialPathsEqual(sp, path)) return src;
+            let serialLinkBus = src.serialLinkBus ?? "unknown";
+            let sampleRate = src.sampleRate;
+            if (bus !== "unknown") {
+              serialLinkBus = bus;
+              const cap = maxSampleRateForBus(bus);
+              if (sampleRate > cap) sampleRate = cap;
+            }
+            const detected: ChipDetectionResult | undefined = chipStr
+              ? {
+                  detectedChip: chipStr,
+                  confidence: "strong",
+                  details: "JSON INFO (serial)"
+                }
+              : src.detected;
+            return { ...src, serialLinkBus, sampleRate, ...(chipStr ? { detected } : {}) };
+          })
+        );
+        return;
+      }
+      if (payload.type === "ERR") return;
 
       const isIna3221Multi =
         (payload.chip === "INA3221" || payload.chip === "INA3221-Q1") &&
         Array.isArray(payload.channels) &&
         payload.channels.length >= 3;
 
-      if (!isIna3221Multi && typeof payload.bus_V !== "number") return;
+      if (
+        !isIna3221Multi &&
+        typeof payload.bus_V !== "number" &&
+        typeof payload.current_A !== "number" &&
+        typeof payload.power_W !== "number"
+      ) {
+        return;
+      }
 
       const path = payload.path;
       setSources((prev) =>
@@ -877,9 +1026,9 @@ export function App() {
               t_host_ms: typeof payload.t_ms === "number" ? payload.t_ms : Date.now(),
               channelModel: { kind: "single" },
               signals: {
-                busVoltage_V: payload.bus_V,
-                current_A: payload.current_A,
-                power_W: payload.power_W
+                busVoltage_V: typeof payload.bus_V === "number" ? payload.bus_V : NaN,
+                current_A: typeof payload.current_A === "number" ? payload.current_A : NaN,
+                power_W: typeof payload.power_W === "number" ? payload.power_W : NaN
               }
             };
           }
@@ -898,18 +1047,27 @@ export function App() {
               : isIna3221Multi && mode3221 === "single"
                 ? framePickForDisplay(frame, singleCh)
                 : framePickForDisplay(frame, src.displayChannel ?? "aggregate");
+          const addrBus = inferSerialLinkBus(payload.addr);
+          let nextBus = src.serialLinkBus ?? "unknown";
+          let nextSr = src.sampleRate;
+          if (addrBus !== "unknown") {
+            nextBus = addrBus;
+            const cap = maxSampleRateForBus(addrBus);
+            if (nextSr > cap) nextSr = cap;
+          }
+          const bufCap = seriesBufferCapacityHz(Math.max(src.sampleRate, nextSr));
+          const t = frame.t_host_ms;
           const nextSeries = {
             t: [...src.series.t, t],
             v: [...src.series.v, typeof picked.busVoltage_V === "number" ? picked.busVoltage_V : NaN],
             i: [...src.series.i, typeof picked.current_A === "number" ? picked.current_A : NaN],
             p: [...src.series.p, typeof picked.power_W === "number" ? picked.power_W : NaN]
           };
-          const max = 300;
-          if (nextSeries.t.length > max) {
-            nextSeries.t = nextSeries.t.slice(-max);
-            nextSeries.v = nextSeries.v.slice(-max);
-            nextSeries.i = nextSeries.i.slice(-max);
-            nextSeries.p = nextSeries.p.slice(-max);
+          if (nextSeries.t.length > bufCap) {
+            nextSeries.t = nextSeries.t.slice(-bufCap);
+            nextSeries.v = nextSeries.v.slice(-bufCap);
+            nextSeries.i = nextSeries.i.slice(-bufCap);
+            nextSeries.p = nextSeries.p.slice(-bufCap);
           }
 
           let nextByCh: [SeriesBundle, SeriesBundle, SeriesBundle] | undefined;
@@ -920,7 +1078,7 @@ export function App() {
                 ? frame.shared.busVoltage_V
                 : undefined;
             const base = src.ina3221SeriesByCh ?? emptyIna3221SeriesByCh();
-            nextByCh = appendIna3221FrameToSeries(frame, base, sharedV);
+            nextByCh = appendIna3221FrameToSeries(frame, base, sharedV, bufCap);
             let cob = src.chartSessionOriginMsByCh ?? [null, null, null];
             if (src.monitoring) {
               const nextOrig = [...cob] as [number | null, number | null, number | null];
@@ -938,7 +1096,7 @@ export function App() {
           let monitoring = src.monitoring;
           if (snap.state.name === "FaultLatched") {
             monitoring = false;
-            faultText = `${snap.state.fault.faultCode}（${snap.state.fault.severity}）：${JSON.stringify(snap.state.fault.triggerRule)}`;
+            faultText = `${snap.state.fault.faultCode} (${snap.state.fault.severity}): ${JSON.stringify(snap.state.fault.triggerRule)}`;
             void getInaApi()?.serialWrite?.({ path: sp, data: "STOP\n" });
           }
 
@@ -964,6 +1122,8 @@ export function App() {
             faultText,
             monitoring,
             detected,
+            serialLinkBus: nextBus,
+            sampleRate: nextSr,
             chartSessionOriginMs,
             ...(isIna3221Multi && mode3221 === "all" && nextByCh && chartSessionOriginMsByCh
               ? { ina3221SeriesByCh: nextByCh, chartSessionOriginMsByCh }
@@ -1068,12 +1228,12 @@ export function App() {
                 i: [...src.series.i, typeof picked.current_A === "number" ? picked.current_A : NaN],
                 p: [...src.series.p, typeof picked.power_W === "number" ? picked.power_W : NaN]
               };
-              const max = 300;
-              if (nextSeries.t.length > max) {
-                nextSeries.t = nextSeries.t.slice(-max);
-                nextSeries.v = nextSeries.v.slice(-max);
-                nextSeries.i = nextSeries.i.slice(-max);
-                nextSeries.p = nextSeries.p.slice(-max);
+              const bufCap = seriesBufferCapacityHz(src.sampleRate);
+              if (nextSeries.t.length > bufCap) {
+                nextSeries.t = nextSeries.t.slice(-bufCap);
+                nextSeries.v = nextSeries.v.slice(-bufCap);
+                nextSeries.i = nextSeries.i.slice(-bufCap);
+                nextSeries.p = nextSeries.p.slice(-bufCap);
               }
 
               let nextByCh: [SeriesBundle, SeriesBundle, SeriesBundle] | undefined;
@@ -1084,7 +1244,7 @@ export function App() {
                     ? frame.shared.busVoltage_V
                     : undefined;
                 const base = src.ina3221SeriesByCh ?? emptyIna3221SeriesByCh();
-                nextByCh = appendIna3221FrameToSeries(frame, base, sharedV);
+                nextByCh = appendIna3221FrameToSeries(frame, base, sharedV, bufCap);
                 let cob = src.chartSessionOriginMsByCh ?? [null, null, null];
                 if (src.monitoring) {
                   const nextOrig = [...cob] as [number | null, number | null, number | null];
@@ -1103,7 +1263,7 @@ export function App() {
               if (snap.state.name === "FaultLatched") {
                 monitoring = false;
                 abort.stop = true;
-                faultText = `${snap.state.fault.faultCode}（${snap.state.fault.severity}）：${JSON.stringify(snap.state.fault.triggerRule)}`;
+                faultText = `${snap.state.fault.faultCode} (${snap.state.fault.severity}): ${JSON.stringify(snap.state.fault.triggerRule)}`;
               }
               let chartSessionOriginMs = src.chartSessionOriginMs;
               if (src.monitoring && nextSeries.t.length > 0 && chartSessionOriginMs == null) {
@@ -1149,9 +1309,18 @@ export function App() {
 
   const picked = useMemo(
     () => pickSignalsForSource(active),
-    [active.lastFrame, active.selectedChip, active.ina3221UiMode, active.displayChannel, active.ina3221SingleChannel]
+    [
+      active.lastFrame,
+      active.transport,
+      active.selectedChip,
+      active.detected,
+      active.ina3221UiMode,
+      active.displayChannel,
+      active.ina3221SingleChannel
+    ]
   );
   const mismatch =
+    active.transport === "Mock" &&
     active.detected &&
     active.detected.detectedChip !== active.selectedChip &&
     active.detected.detectedChip !== "UNKNOWN";
@@ -1175,7 +1344,7 @@ export function App() {
     active.series.t.length === 0;
 
   /** Lock INA3221 plot routing while monitoring */
-  const lockIna3221ChartOptions = active.monitoring && isMultiChannelChipId(active.selectedChip);
+  const lockIna3221ChartOptions = active.monitoring && isMultiChannelChipId(effectiveChip(active));
 
   const serialSourcesSorted = useMemo(
     () => sources.filter((s) => s.transport === "Serial").sort((a, b) => (a.hardwareSlot ?? 0) - (b.hardwareSlot ?? 0)),
@@ -1231,7 +1400,7 @@ export function App() {
           {mismatch ? (
             <div className={`banner bannerCompact ${active.detected?.confidence === "strong" ? "bannerDanger" : ""}`}>
               <div>
-                Chip: <b>{active.selectedChip}</b> ≠ det. <b>{active.detected!.detectedChip}</b>
+                Expected: <b>{active.selectedChip}</b> ≠ detected <b>{active.detected!.detectedChip}</b>
               </div>
               <button
                 onClick={() => updateActive({ selectedChip: active.detected!.detectedChip })}
@@ -1279,9 +1448,8 @@ export function App() {
                 <div className="sourceMeta">
                   <span>{s.connected ? "On" : "Off"}</span>
                   <span>{s.monitoring ? "Run" : "Idle"}</span>
-                  <span>{s.selectedChip}</span>
+                  <span title={s.transport === "Serial" ? "Reported by device JSON (chip field)" : undefined}>{sourceListChipDisplay(s)}</span>
                   <span>{s.sampleRate} Hz</span>
-                  {s.detected && s.detected.detectedChip !== s.selectedChip ? <span className="danger">Mismatch</span> : null}
                 </div>
                 <div className="sourceBtnRow" onClick={(e) => e.stopPropagation()}>
                   {!s.connected ? (
@@ -1290,7 +1458,15 @@ export function App() {
                     <IconDisconnect title="Disconnect" aria-label="Disconnect" onClick={() => disconnectSource(s)} />
                   )}
                   <IconStart
-                    title="Start monitoring"
+                    title={
+                      !s.connected
+                        ? "Connect the serial port first"
+                        : s.monitoring
+                          ? "Already monitoring — Stop first"
+                          : s.connected && !s.detected && (s.serialLinkBus ?? "unknown") === "unknown"
+                            ? "Start: SR + START (chip/link may fill in when INFO arrives)"
+                            : "Start monitoring (SR + START)"
+                    }
                     aria-label="Start monitoring"
                     disabled={!s.connected || s.monitoring}
                     onClick={() => startSource(s)}
@@ -1318,7 +1494,7 @@ export function App() {
                 <div className="sourceMeta">
                   <span>{s.connected ? "On" : "Off"}</span>
                   <span>{s.monitoring ? "Run" : "Idle"}</span>
-                  <span>{s.selectedChip}</span>
+                  <span>{sourceListChipDisplay(s)}</span>
                   <span>{s.sampleRate} Hz</span>
                   {s.detected && s.detected.detectedChip !== s.selectedChip ? <span className="danger">Mismatch</span> : null}
                 </div>
@@ -1353,7 +1529,12 @@ export function App() {
                     type="text"
                     value={active.serialPath ?? ""}
                     onChange={(e) => updateActive({ serialPath: e.target.value })}
-                    disabled={active.monitoring || active.connected}
+                    disabled={active.monitoring}
+                    title={
+                      active.connected && !active.monitoring
+                        ? "Connected: disconnect and reconnect to use a new port"
+                        : undefined
+                    }
                     placeholder="e.g. COM6"
                   />
                 </div>
@@ -1365,7 +1546,12 @@ export function App() {
                       const v = e.target.value;
                       if (v) updateActive({ serialPath: v });
                     }}
-                    disabled={active.monitoring || active.connected}
+                    disabled={active.monitoring}
+                    title={
+                      active.connected && !active.monitoring
+                        ? "Connected: pick a new port, then disconnect and reconnect"
+                        : undefined
+                    }
                   >
                     <option value="">Pick…</option>
                     {ports.map((p) => (
@@ -1399,53 +1585,59 @@ export function App() {
           )}
 
           <div className="row">
-            <div>
-              <label>Chip</label>
+            {active.transport === "Mock" ? (
+              <div>
+                <label>Simulated chip</label>
+                <select
+                  value={active.selectedChip}
+                  onChange={(e) => {
+                    const selectedChip = e.target.value as ChipId;
+                    const patch: Partial<Source> = {
+                      selectedChip,
+                      ...(!isMultiChannelChipId(selectedChip)
+                        ? {
+                            displayChannel: undefined,
+                            ina3221UiMode: undefined,
+                            ina3221SingleChannel: undefined,
+                            ina3221RunMemory: undefined,
+                            ina3221ChannelRun: undefined,
+                            ina3221SeriesByCh: undefined,
+                            chartSessionOriginMsByCh: undefined
+                          }
+                        : {
+                            ina3221UiMode: "single",
+                            ina3221SingleChannel: 0,
+                            displayChannel: 0,
+                            ina3221RunMemory: {},
+                            ina3221ChannelRun: [false, false, false],
+                            ina3221SeriesByCh: emptyIna3221SeriesByCh(),
+                            chartSessionOriginMsByCh: [null, null, null]
+                          })
+                    };
+                    updateActive(patch);
+                  }}
+                  disabled={active.monitoring}
+                >
+                  {CHIP_UI_GROUPS.map((g) => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.chips.map((chip) => (
+                        <option key={chip} value={chip}>
+                          {chipOptionLabel(chip)}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+            <div style={active.transport === "Serial" ? { gridColumn: "1 / -1" } : undefined}>
+              <label>Sample rate</label>
               <select
-                value={active.selectedChip}
-                onChange={(e) => {
-                  const selectedChip = e.target.value as ChipId;
-                  const patch: Partial<Source> = {
-                    selectedChip,
-                    ...(!isMultiChannelChipId(selectedChip)
-                      ? {
-                          displayChannel: undefined,
-                          ina3221UiMode: undefined,
-                          ina3221SingleChannel: undefined,
-                          ina3221RunMemory: undefined,
-                          ina3221ChannelRun: undefined,
-                          ina3221SeriesByCh: undefined,
-                          chartSessionOriginMsByCh: undefined
-                        }
-                      : {
-                          ina3221UiMode: "single",
-                          ina3221SingleChannel: 0,
-                          displayChannel: 0,
-                          ina3221RunMemory: {},
-                          ina3221ChannelRun: [false, false, false],
-                          ina3221SeriesByCh: emptyIna3221SeriesByCh(),
-                          chartSessionOriginMsByCh: [null, null, null]
-                        })
-                  };
-                  updateActive(patch);
-                }}
+                value={active.sampleRate}
+                onChange={(e) => updateActive({ sampleRate: Number(e.target.value) })}
                 disabled={active.monitoring}
               >
-                {CHIP_UI_GROUPS.map((g) => (
-                  <optgroup key={g.label} label={g.label}>
-                    {g.chips.map((chip) => (
-                      <option key={chip} value={chip}>
-                        {chipOptionLabel(chip)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label>Sample rate</label>
-              <select value={active.sampleRate} onChange={(e) => updateActive({ sampleRate: Number(e.target.value) as SampleRatePreset })} disabled={active.monitoring}>
-                {[1, 2, 5, 10, 20, 50, 100].map((v) => (
+                {sampleRateMenuValues(active.serialLinkBus ?? "unknown").map((v) => (
                   <option key={v} value={v}>
                     {v} Hz
                   </option>
@@ -1453,6 +1645,23 @@ export function App() {
               </select>
             </div>
           </div>
+
+          {active.transport === "Serial" ? (
+            <div className="row">
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label>Device (auto)</label>
+                <div className="topbarQuiet" style={{ marginTop: 2 }}>
+                  <b>{active.detected?.detectedChip ?? "—"}</b>
+                  <span style={{ marginLeft: 8, opacity: 0.85 }}>
+                    {active.serialLinkBus === "spi" ? "SPI" : active.serialLinkBus === "i2c" ? "I²C" : ""}
+                  </span>
+                  <span style={{ marginLeft: 6, opacity: 0.65 }}>
+                    from JSON <code>chip</code> / <code>addr</code> · pick rate after connect
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="row">
             <div>
@@ -1819,7 +2028,7 @@ export function App() {
                   </label>
                 ))}
               </div>
-              {isMultiChannelChipId(active.selectedChip) ? (
+              {isMultiChannelChipId(effectiveChip(active)) ? (
                 <>
                   <label className="chartToolbarLabel">
                     <span className="chartToolbarTitle">INA3221</span>
@@ -1895,7 +2104,7 @@ export function App() {
                 <span>Multi-strip</span>
               </label>
             </div>
-            {isMultiChannelChipId(active.selectedChip) && (active.ina3221UiMode ?? "single") === "all" ? (
+            {isMultiChannelChipId(effectiveChip(active)) && (active.ina3221UiMode ?? "single") === "all" ? (
               <div className="chartToolbarRow chartToolbarRowWrap">
                 {active.transport === "Serial" ? (
                   <>
@@ -1986,6 +2195,8 @@ export function App() {
                                 series={chartSeriesForPreview(item.series)}
                                 sessionOriginMs={item.sessionOriginMs}
                                 compact
+                                plotDownsampleMax={plotDecimationMax(item.source.sampleRate)}
+                                sampleRateHz={item.source.sampleRate}
                               />
                             </div>
                           </div>
@@ -2007,7 +2218,7 @@ export function App() {
                   </div>
                 </div>
               )
-            ) : isMultiChannelChipId(active.selectedChip) && (active.ina3221UiMode ?? "single") === "all" ? (
+            ) : isMultiChannelChipId(effectiveChip(active)) && (active.ina3221UiMode ?? "single") === "all" ? (
               <div className="chartBodyFlex">
                 <div className="chartMainInner">
                   <div className="legend legendMultiTop">
@@ -2038,7 +2249,13 @@ export function App() {
                           <div className="chartBlockHead">CH{i + 1}</div>
                           <div className="chartBlockInner">
                             <div className="chartSvgHost">
-                              <MiniPlot series={chartSeriesForPreview(byCh[i])} sessionOriginMs={origin} compact />
+                              <MiniPlot
+                                series={chartSeriesForPreview(byCh[i])}
+                                sessionOriginMs={origin}
+                                compact
+                                plotDownsampleMax={plotDecimationMax(active.sampleRate)}
+                                sampleRateHz={active.sampleRate}
+                              />
                             </div>
                           </div>
                           <div className="chartStripMetrics">
@@ -2068,7 +2285,12 @@ export function App() {
                     </span>
                   </div>
                   <div className="chartSvgHost chartSvgHostMain">
-                    <MiniPlot series={chartSeriesForPreview(active.series)} sessionOriginMs={active.chartSessionOriginMs} />
+                    <MiniPlot
+                      series={chartSeriesForPreview(active.series)}
+                      sessionOriginMs={active.chartSessionOriginMs}
+                      plotDownsampleMax={plotDecimationMax(active.sampleRate)}
+                      sampleRateHz={active.sampleRate}
+                    />
                   </div>
                   <div className="chartStripMetrics">
                     <LiveMetricTriple {...picked} className="cardsStripEmbedded" />
@@ -2085,7 +2307,7 @@ export function App() {
               active.sourceId,
               active.serialPath,
               active.transport,
-              active.selectedChip,
+              effectiveChip(active),
               active.ina3221UiMode,
               active.series,
               active.ina3221SeriesByCh
@@ -2107,8 +2329,11 @@ export function App() {
         <div>INA Monitor Tool — NiusRobotLab</div>
         <div>
           Mode: {mode} • Source: {compactSourceTag(active)}
-          {ina3221RouteSuffix(active)} • Rate: {active.sampleRate} Hz • Detection:{" "}
-          {protectionCfg.enabled ? "on" : "off"}
+          {ina3221RouteSuffix(active)} • Rate: {active.sampleRate} Hz
+          {active.transport === "Serial"
+            ? ` • Chip: ${effectiveChip(active)} · Link: ${active.serialLinkBus === "spi" ? "SPI" : active.serialLinkBus === "i2c" ? "I²C" : "…"}`
+            : ""}{" "}
+          • Detection: {protectionCfg.enabled ? "on" : "off"}
         </div>
       </div>
     </div>
@@ -2202,6 +2427,7 @@ function dataMinMax(arr: number[]): { min: number; max: number } | null {
   return { min: lo, max: hi };
 }
 
+/** Padded data range for one Y trace (slightly more margin than before for calmer autoscale). */
 function seriesYBounds(arr: number[]) {
   let lo = Infinity;
   let hi = -Infinity;
@@ -2215,21 +2441,77 @@ function seriesYBounds(arr: number[]) {
     const e = Math.abs(lo) === 0 ? 0.5 : Math.abs(lo) * 0.05;
     return { lo: lo - e, hi: hi + e };
   }
-  const m = 0.06 * (hi - lo);
+  const m = 0.08 * (hi - lo);
   return { lo: lo - m, hi: hi + m };
+}
+
+/** Snap axis to coarse nice steps so tiny min/max wiggles do not rescale every frame. */
+function quantizeAxisBounds(lo: number, hi: number): { lo: number; hi: number } {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi) || !(hi > lo)) return { lo, hi };
+  const span = hi - lo;
+  const step = niceStep(span / 4);
+  if (!Number.isFinite(step) || step <= 0) return { lo, hi };
+  const qLo = Math.floor(lo / step - 1e-9) * step;
+  const qHi = Math.ceil(hi / step + 1e-9) * step;
+  if (!(qHi > qLo)) return { lo, hi };
+  return { lo: qLo, hi: qHi };
+}
+
+function quantizedSeriesYBounds(arr: number[]): { lo: number; hi: number } {
+  const raw = seriesYBounds(arr);
+  return quantizeAxisBounds(raw.lo, raw.hi);
+}
+
+/**
+ * Stabilize autoscale on one axis (Y traces or relative time window): expand immediately; contract slowly.
+ * Invariant: lo <= raw.lo, hi >= raw.hi (data stays inside range).
+ */
+function smoothYAxisBounds(
+  prev: { lo: number; hi: number } | null,
+  raw: { lo: number; hi: number },
+  relaxFrac = 0.035
+): { lo: number; hi: number } {
+  if (!prev) return raw;
+  let lo = Math.min(prev.lo, raw.lo);
+  let hi = Math.max(prev.hi, raw.hi);
+  const span = Math.max(hi - lo, 1e-12);
+  const relax = span * relaxFrac;
+  lo = Math.min(raw.lo, lo + relax);
+  hi = Math.max(raw.hi, hi - relax);
+  return { lo, hi };
 }
 
 function MiniPlot({
   series,
   sessionOriginMs,
-  compact
+  compact,
+  plotDownsampleMax,
+  sampleRateHz
 }: {
   series: { t: number[]; v: number[]; i: number[]; p: number[] };
   sessionOriginMs: number | null;
   compact?: boolean;
+  /** When buffer has more points, draw at most this many per trace (evenly spaced). */
+  plotDownsampleMax?: number;
+  /** Used to cap chart motion speed (~20 Hz visual at high sample rates). */
+  sampleRateHz: number;
 }) {
   const clipIdPrefix = useId().replace(/:/g, "");
   const hostRef = useRef<HTMLDivElement>(null);
+  const yAxisStableRef = useRef<Record<"v" | "i" | "p", { lo: number; hi: number } | null>>({
+    v: null,
+    i: null,
+    p: null
+  });
+  const xTimeStableRef = useRef<{ lo: number; hi: number } | null>(null);
+  const yAxisSessionKeyRef = useRef(sessionOriginMs);
+  if (sessionOriginMs !== yAxisSessionKeyRef.current) {
+    yAxisSessionKeyRef.current = sessionOriginMs;
+    yAxisStableRef.current = { v: null, i: null, p: null };
+    xTimeStableRef.current = null;
+  }
+  const throttleMs = useMemo(() => chartUiThrottleMs(sampleRateHz), [sampleRateHz]);
+  const plotSeries = useThrottledPlotSeries(series as SeriesBundle, throttleMs);
   const H = compact ? 740 : 1040;
   /** Match viewBox aspect ratio to host so preserveAspectRatio="meet" fills width (no side letterbox). */
   const [vbW, setVbW] = useState(1400);
@@ -2272,7 +2554,7 @@ function MiniPlot({
       window.removeEventListener("resize", onWinResize);
       ro.disconnect();
     };
-  }, [H, series.t.length]);
+  }, [H, plotSeries.t.length]);
 
   const W = vbW;
   /** Title column (left of Y ticks) — generous for large labels */
@@ -2296,20 +2578,63 @@ function MiniPlot({
   const xTickLabelY = H - (compact ? 38 : 44);
   const timeCaptionY = H - (compact ? 12 : 14);
 
-  const xs = series.t;
+  const xs = plotSeries.t;
   const origin = sessionOriginMs ?? (xs.length ? xs[0]! : 0);
   function relMs(tAbs: number) {
     return tAbs - origin;
   }
-  const xmin = xs.length ? relMs(xs[0]!) : 0;
-  const xmax = xs.length ? relMs(xs[xs.length - 1]!) : 0;
+  /** Relative time window (ms): quantized + smoothed so xspan does not jitter frame-to-frame. */
+  const xWindowStable = useMemo(() => {
+    const t = plotSeries.t;
+    if (t.length === 0) return { lo: 0, hi: 1 };
+    const org = sessionOriginMs ?? t[0]!;
+    const rel = (abs: number) => abs - org;
+    let rawMin = rel(t[0]!);
+    let rawMax = rel(t[t.length - 1]!);
+    const minSpan = Math.max(15, 800 / Math.max(1, sampleRateHz));
+    if (rawMax - rawMin < minSpan) {
+      const mid = (rawMin + rawMax) / 2;
+      rawMin = mid - minSpan / 2;
+      rawMax = mid + minSpan / 2;
+    }
+    const rawQ = quantizeAxisBounds(rawMin, rawMax);
+    const s = smoothYAxisBounds(xTimeStableRef.current, rawQ, 0.028);
+    xTimeStableRef.current = s;
+    return s;
+  }, [plotSeries, sessionOriginMs, sampleRateHz]);
+  const xmin = xWindowStable.lo;
+  const xmax = xWindowStable.hi;
   const xspan = Math.max(1e-6, xmax - xmin);
 
-  const rows = [
-    { key: "v", label: "Vbus", unit: "V", color: "#5aa7ff", data: series.v, bounds: seriesYBounds(series.v) },
-    { key: "i", label: "I", unit: "A", color: "#52c41a", data: series.i, bounds: seriesYBounds(series.i) },
-    { key: "p", label: "P", unit: "W", color: "#faad14", data: series.p, bounds: seriesYBounds(series.p) }
-  ] as const;
+  const dmax = plotDownsampleMax ?? 1600;
+  const plotIndices = useMemo(() => {
+    const n = xs.length;
+    if (n <= dmax) return null as number[] | null;
+    const out: number[] = [];
+    const step = (n - 1) / (dmax - 1);
+    for (let j = 0; j < dmax; j++) {
+      out.push(Math.min(n - 1, Math.round(j * step)));
+    }
+    return out;
+  }, [xs.length, dmax]);
+
+  const lineStrokeW =
+    compact ? (xs.length > 1400 ? 1.65 : 2.25) : xs.length > 1400 ? 1.85 : 2.5;
+
+  const rows = useMemo(() => {
+    const r = yAxisStableRef.current;
+    const boundsFor = (arr: number[], k: "v" | "i" | "p") => {
+      const raw = quantizedSeriesYBounds(arr);
+      const s = smoothYAxisBounds(r[k], raw);
+      r[k] = s;
+      return s;
+    };
+    return [
+      { key: "v" as const, label: "Vbus", unit: "V", color: "#5aa7ff", data: plotSeries.v, bounds: boundsFor(plotSeries.v, "v") },
+      { key: "i" as const, label: "I", unit: "A", color: "#52c41a", data: plotSeries.i, bounds: boundsFor(plotSeries.i, "i") },
+      { key: "p" as const, label: "P", unit: "W", color: "#faad14", data: plotSeries.p, bounds: boundsFor(plotSeries.p, "p") }
+    ] as const;
+  }, [plotSeries]);
 
   const plotH = (H - topM - bottomM - 2 * rowGap) / 3;
 
@@ -2333,13 +2658,19 @@ function MiniPlot({
   function pathForRow(arr: number[], bounds: { lo: number; hi: number }, pTop: number) {
     const yspan = Math.max(1e-12, bounds.hi - bounds.lo);
     const pts: string[] = [];
-    for (let k = 0; k < xs.length; k++) {
+    const idxs = plotIndices;
+    const emit = (k: number) => {
       const tx = xs[k]!;
       const y = arr[k]!;
-      if (!Number.isFinite(y)) continue;
+      if (!Number.isFinite(y)) return;
       const px = xToPx(tx);
       const py = pTop + plotH - ((y - bounds.lo) / yspan) * plotH;
       pts.push(`${px.toFixed(2)},${py.toFixed(2)}`);
+    };
+    if (idxs) {
+      for (const k of idxs) emit(k);
+    } else {
+      for (let k = 0; k < xs.length; k++) emit(k);
     }
     return pts.join(" ");
   }
@@ -2513,7 +2844,7 @@ function MiniPlot({
             <polyline
               fill="none"
               stroke={r.color}
-              strokeWidth={compact ? 2.25 : 2.5}
+              strokeWidth={lineStrokeW}
               strokeLinejoin="round"
               strokeLinecap="round"
               points={pathForRow(r.data, r.bounds, pt)}

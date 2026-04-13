@@ -136,7 +136,7 @@ type Props = {
 const TAB_LABELS: Record<ToolsTab, string> = {
   filters: "Filters",
   analysis: "Analysis",
-  window: "Window",
+  window: "Time window",
   advanced: "Advanced",
   output: "Output"
 };
@@ -322,6 +322,44 @@ export function DcToolsPanel({
     return () => window.clearInterval(id);
   }, [analysisMode, autoIntervalMs, autoOnlyWhenMonitoring, monitoring, sampleCount, pluginId]);
 
+  const scheduleFields = (
+    <div className="dcToolsScheduleRow">
+      <label className="dcToolsField dcToolsFieldTrigger">
+        <span className="dcToolsFieldLabel">Trigger</span>
+        <select
+          className="dcToolsSelect dcToolsSelectSm"
+          value={analysisMode}
+          onChange={(e) => setAnalysisMode(e.target.value as "manual" | "auto")}
+        >
+          <option value="manual">Manual</option>
+          <option value="auto">Auto</option>
+        </select>
+      </label>
+      {analysisMode === "auto" ? (
+        <div className="dcToolsAutoScheduleGroup">
+          <label className="dcToolsField">
+            <span className="dcToolsFieldLabel">Period</span>
+            <select
+              className="dcToolsSelect dcToolsSelectSm"
+              value={String(autoIntervalMs)}
+              onChange={(e) => setAutoIntervalMs(Number(e.target.value))}
+            >
+              <option value="500">0.5 s</option>
+              <option value="1000">1 s</option>
+              <option value="2000">2 s</option>
+              <option value="5000">5 s</option>
+              <option value="10000">10 s</option>
+            </select>
+          </label>
+          <label className="dcToolsField dcToolsFieldCheck">
+            <input type="checkbox" checked={autoOnlyWhenMonitoring} onChange={(e) => setAutoOnlyWhenMonitoring(e.target.checked)} />
+            <span>Auto</span>
+          </label>
+        </div>
+      ) : null}
+    </div>
+  );
+
   const tabList = (Object.keys(TAB_LABELS) as ToolsTab[]).map((id) => (
     <button
       key={id}
@@ -350,7 +388,13 @@ export function DcToolsPanel({
             {sourceLabel} · {sampleCount}/{SERIES_BUFFER_CAPACITY}
             {analysisMode === "auto" ? ` · ${autoIntervalMs / 1000}s` : ""}
           </span>
-          <button type="button" className="btnGhost btnTiny" disabled={busy || !selected || sampleCount === 0} onClick={() => void runAnalysis()}>
+          <button
+            type="button"
+            className="btnGhost btnTiny"
+            disabled={busy || !selected || sampleCount === 0}
+            title="Run analysis once (Manual). For periodic runs, set Trigger to Auto on the Analysis tab."
+            onClick={() => void runAnalysis()}
+          >
             {busy ? "…" : "Run"}
           </button>
         </div>
@@ -522,44 +566,22 @@ export function DcToolsPanel({
                 />
               </div>
             ) : null}
+            <div className="dcToolsWindowGrid" style={{ marginTop: 10 }}>
+              <p className="dcToolsMutedSm dcToolsFieldSpan2" style={{ margin: 0 }}>
+                <strong>Manual</strong> — click <strong>Run</strong> in the header. <strong>Auto</strong> — same analysis on a timer while samples exist
+                {autoOnlyWhenMonitoring ? " and monitoring is on" : ""}.
+              </p>
+              {scheduleFields}
+            </div>
           </div>
         ) : null}
 
         {toolsTab === "window" ? (
           <div className="dcToolsCol dcToolsWindowGrid">
-            <label className="dcToolsField">
-              <span className="dcToolsFieldLabel">Trigger</span>
-              <select
-                className="dcToolsSelect dcToolsSelectSm"
-                value={analysisMode}
-                onChange={(e) => setAnalysisMode(e.target.value as "manual" | "auto")}
-              >
-                <option value="manual">Manual</option>
-                <option value="auto">Auto</option>
-              </select>
-            </label>
-            {analysisMode === "auto" ? (
-              <>
-                <label className="dcToolsField">
-                  <span className="dcToolsFieldLabel">Period</span>
-                  <select
-                    className="dcToolsSelect dcToolsSelectSm"
-                    value={String(autoIntervalMs)}
-                    onChange={(e) => setAutoIntervalMs(Number(e.target.value))}
-                  >
-                    <option value="500">0.5 s</option>
-                    <option value="1000">1 s</option>
-                    <option value="2000">2 s</option>
-                    <option value="5000">5 s</option>
-                    <option value="10000">10 s</option>
-                  </select>
-                </label>
-                <label className="dcToolsField dcToolsFieldCheck">
-                  <input type="checkbox" checked={autoOnlyWhenMonitoring} onChange={(e) => setAutoOnlyWhenMonitoring(e.target.checked)} />
-                  <span>Auto only while capturing</span>
-                </label>
-              </>
-            ) : null}
+            <p className="dcToolsMutedSm dcToolsFieldSpan2" style={{ margin: 0 }}>
+              <strong>Schedule</strong> (Manual / Auto) is shared with the <strong>Analysis</strong> tab. Below: limit which samples are passed into the tool (time tail).
+            </p>
+            {scheduleFields}
             <label className="dcToolsField dcToolsFieldSpan2">
               <span className="dcToolsFieldLabel">Last duration (ms)</span>
               <input

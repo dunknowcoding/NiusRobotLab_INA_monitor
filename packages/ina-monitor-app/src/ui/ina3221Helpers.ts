@@ -12,21 +12,25 @@ export const emptyIna3221SeriesByCh = (): [SeriesBundle, SeriesBundle, SeriesBun
   emptySeries()
 ];
 
-/** Ring buffer length for V/I/P time series in the UI */
+/** Ring buffer length for V/I/P time series in the UI (legacy default). */
 export const SERIES_BUFFER_CAPACITY = 300;
 
-const MAX_POINTS = SERIES_BUFFER_CAPACITY;
+/** ~@p windowSec seconds at @p hz, clamped for memory and plot performance. */
+export function seriesBufferCapacityHz(hz: number, windowSec = 4): number {
+  const raw = Math.ceil(Math.max(1, hz) * windowSec);
+  return Math.min(12000, Math.max(400, raw));
+}
 
-function pushPoint(s: SeriesBundle, t: number, v: number, i: number, p: number) {
+function pushPoint(s: SeriesBundle, t: number, v: number, i: number, p: number, maxPoints: number) {
   s.t.push(t);
   s.v.push(v);
   s.i.push(i);
   s.p.push(p);
-  if (s.t.length > MAX_POINTS) {
-    s.t = s.t.slice(-MAX_POINTS);
-    s.v = s.v.slice(-MAX_POINTS);
-    s.i = s.i.slice(-MAX_POINTS);
-    s.p = s.p.slice(-MAX_POINTS);
+  if (s.t.length > maxPoints) {
+    s.t = s.t.slice(-maxPoints);
+    s.v = s.v.slice(-maxPoints);
+    s.i = s.i.slice(-maxPoints);
+    s.p = s.p.slice(-maxPoints);
   }
 }
 
@@ -34,7 +38,8 @@ function pushPoint(s: SeriesBundle, t: number, v: number, i: number, p: number) 
 export function appendIna3221FrameToSeries(
   frame: MeasurementFrame,
   prev: [SeriesBundle, SeriesBundle, SeriesBundle],
-  sharedV: number | undefined
+  sharedV: number | undefined,
+  maxPoints: number = SERIES_BUFFER_CAPACITY
 ): [SeriesBundle, SeriesBundle, SeriesBundle] {
   if (!("channels" in frame) || frame.channels.length < 3) return prev;
   const t = frame.t_host_ms;
@@ -49,7 +54,7 @@ export function appendIna3221FrameToSeries(
       typeof sharedV === "number" ? sharedV : typeof ch.busVoltage_V === "number" ? ch.busVoltage_V : NaN;
     const I = typeof ch.current_A === "number" ? ch.current_A : NaN;
     const P = typeof ch.power_W === "number" ? ch.power_W : NaN;
-    pushPoint(next[idx], t, V, I, P);
+    pushPoint(next[idx], t, V, I, P, maxPoints);
   }
   return next;
 }
