@@ -1750,7 +1750,7 @@ button:disabled {
   border-radius: var(--radius-ctrl);
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.14);
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1766,9 +1766,9 @@ button:disabled {
 }
 
 .chartBlockInner {
-  flex: 1 1 auto;
-  min-height: 200px;
-  height: min(440px, 52vh);
+  flex: 1 0 auto;
+  min-height: 240px;
+  height: clamp(320px, 46vh, 440px);
   min-width: 0;
   padding: 3px 4px 6px;
   box-sizing: border-box;
@@ -1780,6 +1780,12 @@ button:disabled {
 .chartBlockInner .chartSvgHost {
   flex: 1 1 0;
   min-height: 160px;
+}
+
+@media (min-height: 960px) {
+  .chartBlockInner {
+    height: clamp(380px, 52vh, 560px);
+  }
 }
 
 .legendMultiTop {

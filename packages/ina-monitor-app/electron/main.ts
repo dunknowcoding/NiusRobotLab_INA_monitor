@@ -34,6 +34,8 @@ function canonicalSerialPath(p: string): string {
 /** Open serial ports by path (e.g. COM6). Line-buffered JSONL from INA219 bridge. */
 const openSerialPorts = new Map<string, SerialPort>();
 const lineBuffers = new Map<string, string>();
+let serialShutdownInFlight = false;
+let serialShutdownComplete = false;
 
 function broadcastSerialSample(portPath: string, payload: Record<string, unknown>) {
   const data = { path: portPath, ...payload };
@@ -52,9 +54,41 @@ async function closeSerialPort(portPath: string): Promise<void> {
   lineBuffers.delete(portPath);
 }
 
+async function writeSerialLine(portPath: string, data: string): Promise<void> {
+  const port = openSerialPorts.get(portPath);
+  if (!port?.isOpen) return;
+  await new Promise<void>((resolve, reject) => {
+    port.write(data, (err) => (err ? reject(err) : resolve()));
+  });
+  await new Promise<void>((resolve, reject) => {
+    port.drain((err) => (err ? reject(err) : resolve()));
+  });
+}
+
+async function stopAndCloseSerialPort(portPath: string): Promise<void> {
+  const canonicalPath = canonicalSerialPath(portPath);
+  if (!openSerialPorts.has(canonicalPath)) return;
+  try {
+    await writeSerialLine(canonicalPath, "STOP\n");
+  } catch (err) {
+    console.warn("[serial] STOP before close failed:", canonicalPath, err);
+  }
+  try {
+    await closeSerialPort(canonicalPath);
+  } catch (err) {
+    console.warn("[serial] close failed:", canonicalPath, err);
+  }
+}
+
+async function shutdownAllSerialPorts(): Promise<void> {
+  const paths = [...openSerialPorts.keys()];
+  await Promise.allSettled(paths.map((portPath) => stopAndCloseSerialPort(portPath)));
+}
+
 /** Default 16:9 (1600×900); min 1280×720 so three-column layout stays usable */
 const WIN_W = 1600;
 const WIN_H = 900;
+let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -69,6 +103,11 @@ function createWindow() {
       contextIsolation: true,
       preload: PRELOAD_PATH
     }
+  });
+  mainWindow = win;
+
+  win.on("closed", () => {
+    if (mainWindow === win) mainWindow = null;
   });
 
   win.center();
@@ -99,7 +138,7 @@ app.whenReady().then(() => {
     const portPath = canonicalSerialPath(opts.path);
     if (!portPath) throw new Error("serial:open requires path");
 
-    await closeSerialPort(portPath);
+    await stopAndCloseSerialPort(portPath);
 
     const port = new SerialPort({ path: portPath, baudRate, autoOpen: false });
     await new Promise<void>((resolve, reject) => {
@@ -137,7 +176,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("serial:close", async (_evt, portPath: string) => {
-    await closeSerialPort(canonicalSerialPath(portPath));
+    await stopAndCloseSerialPort(portPath);
     return { ok: true as const };
   });
 
@@ -161,5 +200,20 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", (event) => {
+  if (serialShutdownComplete || openSerialPorts.size === 0) {
+    serialShutdownComplete = true;
+    return;
+  }
+  event.preventDefault();
+  if (serialShutdownInFlight) return;
+  serialShutdownInFlight = true;
+  void shutdownAllSerialPorts().finally(() => {
+    serialShutdownComplete = true;
+    serialShutdownInFlight = false;
+    app.quit();
+  });
 });
 
