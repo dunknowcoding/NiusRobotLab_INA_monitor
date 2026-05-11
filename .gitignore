@@ -39,6 +39,7 @@ Desktop.ini
 
 # IDE / editor
 .idea/
+.copilot-debug/
 *.swp
 *.swo
 *~

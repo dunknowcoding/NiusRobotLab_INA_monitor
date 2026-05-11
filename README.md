@@ -1,233 +1,112 @@
-﻿<div align="center">
+﻿# NiusRobotLab INA Monitor
 
-<pre>
-鈻堚枅鈻堚晽   鈻堚枅鈺椻枅鈻堚晽鈻堚枅鈺?  鈻堚枅鈺椻枅鈻堚枅鈻堚枅鈻堚枅鈺椻枅鈻堚枅鈻堚枅鈻堚晽  鈻堚枅鈻堚枅鈻堚枅鈺?鈻堚枅鈻堚枅鈻堚枅鈺? 鈻堚枅鈻堚枅鈻堚枅鈺?鈻堚枅鈻堚枅鈻堚枅鈻堚枅鈺?
-鈻堚枅鈻堚枅鈺? 鈻堚枅鈺戔枅鈻堚晳鈻堚枅鈺?  鈻堚枅鈺戔枅鈻堚晹鈺愨晲鈺愨晲鈺濃枅鈻堚晹鈺愨晲鈻堚枅鈺椻枅鈻堚晹鈺愨晲鈺愨枅鈻堚晽鈻堚枅鈺斺晲鈺愨枅鈻堚晽鈻堚枅鈺斺晲鈺愨晲鈻堚枅鈺椻暁鈺愨晲鈻堚枅鈺斺晲鈺愨暆
-鈻堚枅鈺斺枅鈻堚晽 鈻堚枅鈺戔枅鈻堚晳鈻堚枅鈺?  鈻堚枅鈺戔枅鈻堚枅鈻堚枅鈻堚枅鈺椻枅鈻堚枅鈻堚枅鈻堚晹鈺濃枅鈻堚晳   鈻堚枅鈺戔枅鈻堚枅鈻堚枅鈻堚晹鈺濃枅鈻堚晳   鈻堚枅鈺?  鈻堚枅鈺?  
-鈻堚枅鈺戔暁鈻堚枅鈺椻枅鈻堚晳鈻堚枅鈺戔枅鈻堚晳   鈻堚枅鈺戔暁鈺愨晲鈺愨晲鈻堚枅鈺戔枅鈻堚晹鈺愨晲鈻堚枅鈺椻枅鈻堚晳   鈻堚枅鈺戔枅鈻堚晹鈺愨晲鈻堚枅鈺椻枅鈻堚晳   鈻堚枅鈺?  鈻堚枅鈺?  
-鈻堚枅鈺?鈺氣枅鈻堚枅鈻堚晳鈻堚枅鈺戔暁鈻堚枅鈻堚枅鈻堚枅鈺斺暆鈻堚枅鈻堚枅鈻堚枅鈻堚晳鈻堚枅鈺? 鈻堚枅鈺戔暁鈻堚枅鈻堚枅鈻堚枅鈺斺暆鈻堚枅鈻堚枅鈻堚枅鈺斺暆鈺氣枅鈻堚枅鈻堚枅鈻堚晹鈺?  鈻堚枅鈺?  
-鈺氣晲鈺? 鈺氣晲鈺愨晲鈺濃暁鈺愨暆 鈺氣晲鈺愨晲鈺愨晲鈺?鈺氣晲鈺愨晲鈺愨晲鈺愨暆鈺氣晲鈺? 鈺氣晲鈺?鈺氣晲鈺愨晲鈺愨晲鈺?鈺氣晲鈺愨晲鈺愨晲鈺? 鈺氣晲鈺愨晲鈺愨晲鈺?   鈺氣晲鈺?  
+[![CI](https://github.com/dunknowcoding/NiusRobotLab_INA_monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/dunknowcoding/NiusRobotLab_INA_monitor/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-00a3e0?style=flat-square)](LICENSE)
+[![Version](https://img.shields.io/badge/version-0.3.0-5b4bff?style=flat-square)](package.json)
+[![Electron](https://img.shields.io/badge/Electron-32.x-47848f?style=flat-square)](https://www.electronjs.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square)](https://www.typescriptlang.org/)
 
-鈻堚枅鈺?     鈻堚枅鈻堚枅鈻堚晽 鈻堚枅鈻堚枅鈻堚枅鈺?
-鈻堚枅鈺?    鈻堚枅鈺斺晲鈺愨枅鈻堚晽鈻堚枅鈺斺晲鈺愨枅鈻堚晽
-鈻堚枅鈺?    鈻堚枅鈻堚枅鈻堚枅鈻堚晳鈻堚枅鈻堚枅鈻堚枅鈺斺暆
-鈻堚枅鈺?    鈻堚枅鈺斺晲鈺愨枅鈻堚晳鈻堚枅鈺斺晲鈺愨枅鈻堚晽
-鈻堚枅鈻堚枅鈻堚枅鈻堚晽鈻堚枅鈺? 鈻堚枅鈺戔枅鈻堚枅鈻堚枅鈻堚晹鈺?
-鈺氣晲鈺愨晲鈺愨晲鈺愨暆鈺氣晲鈺? 鈺氣晲鈺濃暁鈺愨晲鈺愨晲鈺愨暆 
-</pre>
+A desktop monitoring tool for INA-series power sensors, focused on real-time visualization, serial-device integration, fault-aware analysis, and a debuggable development workflow.
 
-# INA Monitor
+![INA Monitor screenshot](assets/screenshot.JPG)
 
-### Precision power analytics for INA-series shunt monitors
+## Overview
 
-[![License](https://img.shields.io/badge/license-MIT-00d4ff?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.3.0-7c3aed?style=for-the-badge&logo=semver&logoColor=white)](package.json)
-[![Electron](https://img.shields.io/badge/Electron-32.x-47848f?style=for-the-badge&logo=electron&logoColor=white)](https://www.electronjs.org/)
-[![React](https://img.shields.io/badge/React-18-61dafb?style=for-the-badge&logo=react&logoColor=0d1117)](https://react.dev/)
+NiusRobotLab INA Monitor is a small monorepo with two packages:
 
-[![Linux](https://img.shields.io/badge/Linux-鉁?fbbf24?style=flat-square&logo=linux&logoColor=black)]()
-[![macOS](https://img.shields.io/badge/macOS-鉁?000000?style=flat-square&logo=apple&logoColor=white)]()
-[![Windows](https://img.shields.io/badge/Windows-鉁?0078d4?style=flat-square&logo=windows11&logoColor=white)]()
+- `@niusrobotlab/ina-monitor-app`: Electron + React desktop application.
+- `@niusrobotlab/ina-monitor-core`: shared models, conversion logic, fault detection, and tests.
 
-<br/>
+The application is designed for bench testing and driver validation workflows where you need to connect a live INA device over serial, inspect voltage/current/power traces, and compare that against simulated sources during development.
 
-**Cross-platform desktop instrument** 鈥?real-time visualization, serial bridging, and extensible analysis pipelines for **INA219**, **INA226**, **INA228**, **INA3221**, and related energy-monitor ICs.
+## Key capabilities
 
-<br/>
+- Real-time charts for voltage, current, and power.
+- Multi-source monitoring, including serial inputs and built-in mock sources.
+- INA3221-specific multi-channel views with consistent front-end routing.
+- Fault-aware monitoring pipeline in the shared core package.
+- Electron preload bridge for serial access from the renderer.
+- Local GitHub Actions CI for lint, test, and build validation.
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:7c3aed,100:00d4ff&height=120&section=header&text=NiusRobotLab&fontSize=42&fontColor=fff&animation=twinkling&fontAlignY=35" alt="NiusRobotLab banner" width="100%"/>
+## Supported workflow
 
-### Crafted by [**NiusRobotLab**](https://www.youtube.com/@NiusRobotLab) 鈥?robotics-grade tooling for makers & engineers
+The UI and supporting protocol are built for INA-series monitoring flows, including common usage with:
 
-<br/>
+- INA219
+- INA226
+- INA228
+- INA3221
+- Related devices exposed through the same serial JSONL bridge model
 
-</div>
+Actual device support depends on the firmware bridge feeding the desktop app.
 
----
+## Getting started
 
-## Highlights
+### Prerequisites
 
-| | |
-|:---:|:---|
-| **Live dashboard** | Multi-channel metrics, fault awareness, and a data pipeline tuned for bench & field use |
-| **Input sources** | **16** independent **serial stream** slots (USB JSONL) plus **3** built-in **mock** (simulated) sources for INA219 / INA226 / INA3221 鈥?no hardware required for demos |
-| **Serial bridge** | JSONL protocol over USB serial 鈥?pair with firmware examples in `packages/arduino-bridge` |
-| **Modern stack** | **Electron** + **Vite** + **React** + **TypeScript** 鈥?fast HMR in dev, optimized renderer in prod |
-| **Core library** | `@niusrobotlab/ina-monitor-core` 鈥?shared models, transports, and protection logic |
+- Node.js 20 or newer recommended
+- npm
+- Windows, Linux, or macOS
 
-<p align="center">
-  <img src="assets/screenshot.JPG" alt="INA Monitor 鈥?dashboard with serial and mock input sources" width="92%"/>
-  <br/>
-  <sub>Reference screenshot (<code>assets/screenshot.JPG</code>): up to <strong>16</strong> concurrent serial streams and <strong>3</strong> simulated mock streams.</sub>
-</p>
-
----
-
-## Architecture
-
-```mermaid
-flowchart LR
-    subgraph Host["Host PC"]
-        UI["React UI<br/>Vite renderer"]
-        EL["Electron main"]
-        SP["serialport"]
-    end
-    subgraph Device["MCU + INA"]
-        FW["Firmware bridge<br/>.ino examples"]
-    end
-    UI <--> EL
-    EL <--> SP
-    SP <-- USB serial JSONL --> FW
-```
-
----
-
-## Quick start
+### Install
 
 ```bash
 git clone https://github.com/dunknowcoding/NiusRobotLab_INA_monitor.git
 cd NiusRobotLab_INA_monitor
 npm install
+```
+
+### Run in development
+
+```bash
 npm run dev
 ```
 
-- **Development** runs Vite on `:5173` and launches Electron with hot reload. The UI resolves `@niusrobotlab/ina-monitor-core` from **TypeScript sources**, so you do **not** need to build the core package first.
-- **Production build** (after `npm run build`):
+This starts the Vite renderer and launches the Electron shell after the Electron main/preload bundle has been compiled.
+
+### Build
+
+```bash
+npm run build
+```
+
+### Run the production app locally
 
 ```bash
 npm run start:app
 ```
 
-### `npm run dev` 鈥?what happens (avoid silent failures)
+## Repository layout
 
-1. **Electron main/preload are compiled first**  
-   The app package defines **`predev`** 鈫?**`npm run build:electron`**, which runs **`tsc`** for the Electron **main** process and **preload** script into **`packages/ina-monitor-app/dist-electron/`**.  
-   **Why:** Electron鈥檚 entry is `dist-electron/main.js`. If that folder is missing (fresh clone, cleanup, or deleted `dist-electron`), Electron exits with **code 1** and almost no useful log. Running **`build:electron` before** Vite + Electron prevents that.
-
-2. **Port `5173` must be free**  
-   Vite listens on **`http://localhost:5173/`**; the dev script waits for that port before starting Electron. If something else already uses **5173**, Vite fails with *鈥淧ort 5173 is already in use鈥? and the whole `dev` command may exit with code **1** (not an Electron bug 鈥?fix by closing the other dev server or freeing the port). To use another port, change Vite鈥檚 `server.port` and the **`wait-on tcp:<port>`** string in `packages/ina-monitor-app/package.json` so they match.
-
----
-
-## Workspace layout
-
-| Package | Role |
-|--------|------|
-| `@niusrobotlab/ina-monitor-core` | Types, protocols, fault engine, transports (library) |
-| `@niusrobotlab/ina-monitor-app` | Electron shell + React UI |
-| `arduino-bridge` | Example sketches for common breakout boards |
-
----
-
-## Scripts (root)
-
-| Command | Description |
-|--------|-------------|
-| `npm run dev` | Start Vite + Electron in development; **`predev`** runs **`build:electron`** first (writes `dist-electron/`) |
-| `npm run build` | Build core, then renderer + Electron main/preload |
-| `npm run start:app` | Run packaged Electron app (requires build first) |
-| `npm run test` | Run core unit tests |
-| `npm run lint` | ESLint (flat config) |
-
----
-
-## Development & build requirements
-
-### All platforms
-
-| Requirement | Notes |
-|-------------|--------|
-| **Node.js** | **鈮?18** (current **LTS** recommended: 20.x or 22.x) |
-| **npm** | Comes with Node; **workspaces** are used (default in npm 7+) |
-| **Git** | For cloning and version control |
-| **Disk / RAM** | ~500 MB for `node_modules` (varies); **鈮?4 GB RAM** recommended for comfortable dev |
-
-The app depends on **[`serialport`](https://www.npmjs.com/package/serialport)** (native Node addon). `npm install` usually downloads **prebuilt binaries**. If a prebuild is missing for your OS/CPU/Node combo, npm falls back to **compiling from source**, which needs the toolchain below.
-
----
-
-### Windows
-
-| Item | Purpose |
-|------|---------|
-| **Windows 10 / 11** (64-bit; **ARM64** supported where Node/Electron builds exist) | Host OS |
-| **[Node.js Windows Installer](https://nodejs.org/)** (LTS) | Node + npm; enable 鈥淭ools for native modules鈥?if the installer offers it |
-| **Build tools (if native compile is required)** | Install **[Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)** with **鈥淒esktop development with C++鈥?* (MSVC, Windows SDK), *or* full **Visual Studio** with the same workload 鈥?required when `serialport` must compile via `node-gyp` |
-| **Python 3.x** | Often required by `node-gyp` when building native addons (install from [python.org](https://www.python.org/) and ensure `python` is on `PATH`) |
-
-**Tips:** Run the terminal **as Administrator** only if installs fail due to permission issues. Use **PowerShell** or **cmd**; **Git Bash** works but paths must remain consistent. If USB serial access fails, install the board鈥檚 USB driver (e.g. CP210x, CH340, FTDI) from the vendor.
-
----
-
-### Linux
-
-| Item | Purpose |
-|------|---------|
-| **glibc-based** distros (Debian, Ubuntu, Fedora, etc.) | Most tested; **musl** (Alpine) may need extra steps for Electron/native modules |
-| **`build-essential`** (Debian/Ubuntu) or **`gcc`**, **`make`**, **`python3`** | Toolchain if `serialport` builds from source |
-| **`libudev-dev`** (Debian/Ubuntu) or **`systemd-devel`** / equivalent | Headers for serial port enumeration (`udev`) |
-
-**Debian / Ubuntu example:**
-
-```bash
-sudo apt update
-sudo apt install -y build-essential python3 git
-sudo apt install -y libudev-dev   # for node-serialport
+```text
+.
+|- .github/workflows/ci.yml
+|- assets/
+|- packages/
+|  |- ina-monitor-app/
+|  \- ina-monitor-core/
+|- package.json
+|- package-lock.json
+\- README.md
 ```
 
-**Fedora example:**
+## Development checks
 
-```bash
-sudo dnf groupinstall -y "Development Tools"
-sudo dnf install -y python3 git systemd-devel pkgconf-pkg-config
-```
+The repository exposes a small set of top-level commands:
 
-Grant your user access to serial devices if needed (e.g. add user to **`dialout`** on Debian/Ubuntu: `sudo usermod -aG dialout $USER`, then re-login).
+- `npm run lint:ws` -> lint all workspace packages
+- `npm test` -> run the core package test suite
+- `npm run build` -> build core and app packages
 
----
+These same checks are used by the GitHub Actions workflow in `.github/workflows/ci.yml`.
 
-### macOS
+## Notes for contributors
 
-| Item | Purpose |
-|------|---------|
-| **macOS 11+** (Big Sur or newer recommended) | Matches current Electron support |
-| **Xcode Command Line Tools** | `clang`, `make` for any native compile: `xcode-select --install` |
-| **Python 3** | Bundled or via Homebrew if `node-gyp` asks for it |
-
-Install Node via the [official installer](https://nodejs.org/) or **Homebrew** (`brew install node@20`). Approve any Gatekeeper prompts when Electron first runs.
-
----
-
-### Verify your environment
-
-```bash
-node -v    # should print v18.x or higher
-npm -v
-```
-
-Then from the repo root: `npm install` and `npm run dev`.
-
----
+- The Electron app expects its preload bundle under `packages/ina-monitor-app/dist-electron/`.
+- The desktop app uses a serial bridge contract; unsupported transport-side command assumptions should be avoided in the renderer.
+- Repository-local debug artifacts should not be committed.
 
 ## License
 
-This project is released under the [**MIT License**](LICENSE).
-
----
-
-<div align="center">
-
-<br/>
-
-### Built with precision by **NiusRobotLab**
-
-*Open hardware. Open software. Measure everything that matters.*
-
-[![GitHub Org](https://img.shields.io/badge/GitHub-NiusRobotLab-181717?style=for-the-badge&logo=github)](https://www.youtube.com/@NiusRobotLab)
-
-<br/>
-
-<img src="https://capsule-render.vercel.app/api?type=waving&color=0:00d4ff,100:7c3aed&height=100&section=footer&animation=twinkling" alt="" width="100%"/>
-
-</div>
-
+This project is released under the MIT License. See [LICENSE](LICENSE).
