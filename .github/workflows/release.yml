@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build And Publish Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Verify tag matches package version
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION="$(node -p \"require('./package.json').version\")"
+          echo "Tag version: ${TAG_VERSION}"
+          echo "Package version: ${PACKAGE_VERSION}"
+          test "${TAG_VERSION}" = "${PACKAGE_VERSION}"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build workspace
+        run: npm run build
+
+      - name: Bundle release artifacts
+        shell: bash
+        run: |
+          mkdir -p release-bundle/packages/ina-monitor-app
+          mkdir -p release-bundle/packages/ina-monitor-core
+          cp LICENSE README.md package.json package-lock.json release-bundle/
+          cp packages/ina-monitor-app/package.json release-bundle/packages/ina-monitor-app/
+          cp -R packages/ina-monitor-app/dist-electron release-bundle/packages/ina-monitor-app/
+          cp -R packages/ina-monitor-app/dist-renderer release-bundle/packages/ina-monitor-app/
+          cp packages/ina-monitor-core/package.json release-bundle/packages/ina-monitor-core/
+          cp -R packages/ina-monitor-core/dist release-bundle/packages/ina-monitor-core/
+          zip -r "ina-monitor-${GITHUB_REF_NAME}.zip" release-bundle
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ina-monitor-${{ github.ref_name }}
+          path: ina-monitor-${{ github.ref_name }}.zip
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ina-monitor-${{ github.ref_name }}.zip
+          generate_release_notes: true
